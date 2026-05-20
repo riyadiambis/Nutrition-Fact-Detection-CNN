@@ -1,0 +1,15 @@
+# Mengabaikan folder output dan isinya
+output/
+
+# Mengabaikan file gambar testing lokal
+*.png
+*.jpg
+*.jpeg
+
+# Mengabaikan file coretan Jupyter Notebook
+*.ipynb
+
+# Mengabaikan cache bawaan Python (jaga-jaga)
+__pycache__/
+.venv/
+env/
