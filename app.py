@@ -1,3 +1,11 @@
+import os
+# ==========================================
+# VAKSIN ANTI-SEGFAULT (HARUS PALING ATAS!)
+# ==========================================
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"  # Matikan paksa pencarian GPU (Penyebab utama error 303)
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"   # Matikan log error C++ yang bikin spam
+os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"  # Cegah bentrok instruksi prosesor
+
 import streamlit as st
 import cv2
 import numpy as np
@@ -12,16 +20,27 @@ st.title("🍬 Scanner Informasi Nilai Gizi")
 st.write("Unggah foto kemasan jajananmu, dan biarkan AI mendeteksi kandungan Gula & Garam secara otomatis!")
 
 # ==========================================
-# CACHE MODEL (Agar RAM tidak meledak di-load berulang kali)
+# CACHE MODEL
 # ==========================================
 @st.cache_resource
 def load_models():
     import tensorflow as tf
     from paddleocr import PaddleOCR
-    # Load Model V3 (Deteksi Kotak)
-    model_deteksi = tf.keras.models.load_model('bestv3.1.keras')
-    # Load PaddleOCR (Ekstraksi Teks)
-    ocr_engine = PaddleOCR(use_textline_orientation=True, lang='id')
+    
+    # Batasi penggunaan Thread (Core CPU) agar RAM server 1GB tidak meledak
+    tf.config.threading.set_inter_op_parallelism_threads(1)
+    tf.config.threading.set_intra_op_parallelism_threads(1)
+    
+    # Jalur absolut file
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    MODEL_PATH = os.path.join(BASE_DIR, 'bestv3.1.keras')
+    
+    # Load model tanpa kompilasi JIT (Hemat RAM!)
+    model_deteksi = tf.keras.models.load_model(MODEL_PATH, compile=False)
+    
+    # Load PaddleOCR dengan perintah paksa mode CPU
+    ocr_engine = PaddleOCR(use_textline_orientation=True, lang='id', use_gpu=False)
+    
     return model_deteksi, ocr_engine
 
 model_deteksi, ocr_engine = load_models()
@@ -46,12 +65,10 @@ def extract_nutrition_value_smart(lines, keywords):
             
     if not target_item: return None
 
-    # Cek di baris yang sama
     match = num_pattern.search(target_item['text'])
     if match:
         return f"{match.group(2).replace(',', '.')} {match.group(3)}"
 
-    # Cek baris sejajar
     target_y = get_center_y(target_item['bbox'])
     kandidat_sejajar = []
     for item in lines:
@@ -81,7 +98,7 @@ if uploaded_file is not None:
     col1, col2 = st.columns(2)
     with col1:
         st.subheader("📷 Foto Asli")
-        st.image(image_pil, use_container_width=True)
+        st.image(image_pil, width=350)
 
     with st.spinner('Menganalisis gambar dan mencari tabel gizi...'):
         img_rgb = img_asli if len(img_asli.shape) == 3 and img_asli.shape[2] == 3 else cv2.cvtColor(img_asli, cv2.COLOR_BGR2RGB)
@@ -100,7 +117,7 @@ if uploaded_file is not None:
         
         with col2:
             st.subheader("✂️ Hasil Potong Tabel Gizi")
-            st.image(potongan_ocr, use_container_width=True)
+            st.image(potongan_ocr, width=350)
 
     with st.spinner('Membaca teks menggunakan PaddleOCR...'):
         ocr_result = ocr_engine.ocr(potongan_ocr)
@@ -117,11 +134,9 @@ if uploaded_file is not None:
                 if len(line_info) == 2:
                     all_lines.append({'text': line_info[1][0], 'bbox': line_info[0]})
 
-        # 4. Ekstraksi Nilai Gizi
         hasil_gula = extract_nutrition_value_smart(all_lines, ['gula'])
         hasil_garam = extract_nutrition_value_smart(all_lines, ['garam', 'natrium'])
 
-    # Tampilkan Hasil Akhir
     st.divider()
     st.subheader("💡 Hasil Ekstraksi Gizi")
     
