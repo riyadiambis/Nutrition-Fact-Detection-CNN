@@ -39,7 +39,7 @@ def load_models():
     model_deteksi = tf.keras.models.load_model(MODEL_PATH, compile=False)
     
     # Load PaddleOCR dengan perintah paksa mode CPU
-    ocr_engine = PaddleOCR(use_textline_orientation=True, lang='id', use_gpu=False)
+    ocr_engine = PaddleOCR(use_textline_orientation=True, lang='id')
     
     return model_deteksi, ocr_engine
 
